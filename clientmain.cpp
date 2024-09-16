@@ -1,10 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <netdb.h>
 #include "calcLib.h"
+
+// Uncomment the next line to enable debug mode
+//#define DEBUG
 
 #define BUFFER_SIZE 1024
 
@@ -42,6 +47,7 @@ int main(int argc, char *argv[]) {
     server = gethostbyname(hostname);
     if (server == NULL) {
         printf("ERROR: RESOLVE ISSUE\n");
+        close(sockfd);
         return 1;
     }
 
@@ -56,6 +62,10 @@ int main(int argc, char *argv[]) {
         close(sockfd);
         return 1;
     }
+
+#ifdef DEBUG
+    printf("Connected to %s:%d local %s:%d\n", hostname, port, inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+#endif
 
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
@@ -112,6 +122,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+#ifdef DEBUG
+    printf("Calculated the result to %.8g\n", result);
+#endif
+
     // Send the result to server
     snprintf(buffer, BUFFER_SIZE, "%.8g\n", result);
     n = write(sockfd, buffer, strlen(buffer));
@@ -130,8 +144,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("%s", buffer);
+    if (strstr(buffer, "OK") != NULL) {
+        printf("OK (myresult=%.8g)\n", result);
+    } else {
+        printf("%s", buffer);
+    }
+
     close(sockfd);
     return 0;
 }
+
 
