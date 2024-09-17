@@ -1,15 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <arpa/inet.h>
-#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <netdb.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 #include "calcLib.h"
 
 // Uncomment the next line to enable debug mode
-//#define DEBUG
+// #define DEBUG
 
 #define BUFFER_SIZE 1024
 
@@ -29,43 +29,54 @@ int main(int argc, char *argv[]) {
 
     *colonPos = '\0';
     char *hostname = input;
-    int port = atoi(colonPos + 1);
+    char *portStr = colonPos + 1;
 
-    printf("Host %s, and port %d.\n", hostname, port);
+    printf("Host %s, and port %s.\n", hostname, portStr);
 
-    // Set up socket
+    struct addrinfo hints, *res, *rp;
     int sockfd;
-    struct sockaddr_in server_addr;
-    struct hostent *server;
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        printf("ERROR: CANT CONNECT TO %s\n", hostname);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC; // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+
+    int status = getaddrinfo(hostname, portStr, &hints, &res);
+    if (status != 0) {
+        printf("ERROR: RESOLVE ISSUE (%s)\n", gai_strerror(status));
         return 1;
     }
 
-    server = gethostbyname(hostname);
-    if (server == NULL) {
-        printf("ERROR: RESOLVE ISSUE\n");
+    // Try to connect to one of the addresses returned by getaddrinfo
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd == -1) continue;
+
+        if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0) break; // Success
+
         close(sockfd);
-        return 1;
     }
 
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    memcpy(&server_addr.sin_addr.s_addr, server->h_addr, server->h_length);
-
-    // Connect to server
-    if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+    if (rp == NULL) {
         printf("ERROR: CANT CONNECT TO %s\n", hostname);
-        close(sockfd);
+        freeaddrinfo(res);
         return 1;
     }
 
 #ifdef DEBUG
-    printf("Connected to %s:%d local %s:%d\n", hostname, port, inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+    char addrstr[INET6_ADDRSTRLEN];
+    void *addr;
+    if (rp->ai_family == AF_INET) { // IPv4
+        struct sockaddr_in *ipv4 = (struct sockaddr_in *)rp->ai_addr;
+        addr = &(ipv4->sin_addr);
+    } else { // IPv6
+        struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)rp->ai_addr;
+        addr = &(ipv6->sin6_addr);
+    }
+    inet_ntop(rp->ai_family, addr, addrstr, sizeof(addrstr));
+    printf("Connected to %s:%s local %s\n", hostname, portStr, addrstr);
 #endif
+
+    freeaddrinfo(res);
 
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
@@ -153,5 +164,3 @@ int main(int argc, char *argv[]) {
     close(sockfd);
     return 0;
 }
-
-
