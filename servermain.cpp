@@ -200,14 +200,24 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Leer respuesta del cliente
-        memset(buffer, 0, BUFFER_SIZE);
-        n = read(client_sock, buffer, BUFFER_SIZE - 1);
-        if (n <= 0) {
-            printf("ERROR: Reading result from client\n");
-            close(client_sock);
-            continue;
-        }
+      // Leer respuesta del cliente
+memset(buffer, 0, BUFFER_SIZE);
+n = read(client_sock, buffer, BUFFER_SIZE - 1);
+if (n <= 0) {
+    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        // El tiempo de espera expiró
+        printf("ERROR: Timeout occurred\n");
+        write(client_sock, "ERROR TO\n", 9);  // Enviar mensaje de timeout
+    } else if (n == 0) {
+        // El cliente cerró la conexión
+        printf("Client closed the connection\n");
+    } else {
+        // Otro error ocurrió
+        printf("ERROR: Reading result from client\n");
+    }
+    close(client_sock);
+    continue;
+}
 
 #ifdef DEBUG
         printf("Received result from client: %s", buffer);
